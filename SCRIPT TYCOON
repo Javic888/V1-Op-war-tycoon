@@ -1,1 +1,642 @@
+--[[
+    HKL BROWSER SERVER v4.0
+    VPM | JNZ | HKL ~ Sociedad 035
+    Totalmente funcional en Delta, Arceus X, Krnl, etc.
+]]
 
+-- Servicios
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local TeleportService = game:GetService("TeleportService")
+local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local Camera = Workspace.CurrentCamera
+
+-- ========== VARIABLES ==========
+local menuOpen = true
+local espActive = false
+local aimbotActive = false
+local espObjects = {}
+local espConnections = {}
+local rgbHue = 0
+local flyActive = false
+local flyBodyVelocity = nil
+local flyBodyGyro = nil
+
+-- Configuración ESP
+local espSettings = {
+    RGB = true,
+    FillTransparency = 0.5,
+    Thickness = 2
+}
+
+-- Configuración Aimbot
+local aimbotSettings = {
+    Enabled = false,
+    Smoothness = 0.3,
+    FOV = 90,
+    TargetPart = "Head"
+}
+
+-- ========== CREAR GUI ==========
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "HKL_Menu"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = CoreGui
+
+-- BOTÓN DE TOGGLE RGB
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
+ToggleBtn.Position = UDim2.new(1, -60, 0, 20)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+ToggleBtn.BackgroundTransparency = 0.3
+ToggleBtn.Text = "☰"
+ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 100)
+ToggleBtn.TextSize = 30
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.Parent = ScreenGui
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleBtn
+
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Thickness = 2
+ToggleStroke.Color = Color3.fromRGB(0, 255, 100)
+ToggleStroke.Parent = ToggleBtn
+
+-- ANIMACIÓN RGB DEL BOTÓN
+RunService.RenderStepped:Connect(function()
+    if ToggleBtn and ToggleBtn.Parent then
+        rgbHue = (rgbHue + 0.005) % 1
+        local col = Color3.fromHSV(rgbHue, 1, 1)
+        ToggleStroke.Color = col
+        ToggleBtn.TextColor3 = col
+    end
+end)
+
+-- MENÚ PRINCIPAL
+local MainMenu = Instance.new("Frame")
+MainMenu.Size = UDim2.new(0, 320, 0, 480)
+MainMenu.Position = UDim2.new(0, 10, 0, 80)
+MainMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+MainMenu.BackgroundTransparency = 0.1
+MainMenu.BorderSizePixel = 0
+MainMenu.Visible = true
+MainMenu.Parent = ScreenGui
+
+local MenuCorner = Instance.new("UICorner")
+MenuCorner.CornerRadius = UDim.new(0, 12)
+MenuCorner.Parent = MainMenu
+
+local MenuStroke = Instance.new("UIStroke")
+MenuStroke.Thickness = 2
+MenuStroke.Color = Color3.fromRGB(0, 255, 100)
+MenuStroke.Parent = MainMenu
+
+-- TÍTULO
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, 0, 0, 45)
+TitleLabel.Position = UDim2.new(0, 0, 0, 0)
+TitleLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+TitleLabel.Text = "⚡ HKL BROWSER v4.0 ⚡"
+TitleLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+TitleLabel.TextSize = 18
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.Parent = MainMenu
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 12)
+TitleCorner.Parent = TitleLabel
+
+-- SCROLLING FRAME
+local Scrolling = Instance.new("ScrollingFrame")
+Scrolling.Size = UDim2.new(1, -10, 1, -55)
+Scrolling.Position = UDim2.new(0, 5, 0, 50)
+Scrolling.BackgroundTransparency = 1
+Scrolling.ScrollBarThickness = 4
+Scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+Scrolling.Parent = MainMenu
+
+local UILayout = Instance.new("UIListLayout")
+UILayout.Padding = UDim.new(0, 5)
+UILayout.SortOrder = Enum.SortOrder.LayoutOrder
+UILayout.Parent = Scrolling
+
+-- ========== FUNCIONES UI ==========
+function AddButton(text, color, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 40)
+    btn.BackgroundColor3 = color or Color3.fromRGB(40, 40, 55)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 14
+    btn.Font = Enum.Font.Gotham
+    btn.Parent = Scrolling
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = btn
+    
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+function AddToggle(text, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 40)
+    frame.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    frame.Parent = Scrolling
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.Position = UDim2.new(0, 10, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.Font = Enum.Font.Gotham
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+    
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.new(0, 60, 0, 30)
+    toggle.Position = UDim2.new(1, -70, 0.5, -15)
+    toggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    toggle.Text = "OFF"
+    toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggle.TextSize = 12
+    toggle.Font = Enum.Font.GothamBold
+    toggle.Parent = frame
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 5)
+    toggleCorner.Parent = toggle
+    
+    local state = false
+    toggle.MouseButton1Click:Connect(function()
+        state = not state
+        toggle.BackgroundColor3 = state and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+        toggle.Text = state and "ON" or "OFF"
+        callback(state)
+    end)
+    
+    return toggle
+end
+
+function AddSlider(text, min, max, default, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 55)
+    frame.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    frame.Parent = Scrolling
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7, 0, 0.4, 0)
+    label.Position = UDim2.new(0, 10, 0, 5)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 12
+    label.Font = Enum.Font.Gotham
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+    
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Size = UDim2.new(0.3, 0, 0.4, 0)
+    valueLabel.Position = UDim2.new(0.7, 0, 0, 5)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = tostring(default)
+    valueLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+    valueLabel.TextSize = 12
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.Parent = frame
+    
+    local sliderBg = Instance.new("Frame")
+    sliderBg.Size = UDim2.new(1, -20, 0, 10)
+    sliderBg.Position = UDim2.new(0, 10, 0, 35)
+    sliderBg.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+    sliderBg.Parent = frame
+    
+    local sliderCorner = Instance.new("UICorner")
+    sliderCorner.CornerRadius = UDim.new(0, 5)
+    sliderCorner.Parent = sliderBg
+    
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+    fill.Parent = sliderBg
+    
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(0, 5)
+    fillCorner.Parent = fill
+    
+    local dragging = false
+    local value = default
+    
+    sliderBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+    
+    sliderBg.InputEnded:Connect(function()
+        dragging = false
+    end)
+    
+    RunService.RenderStepped:Connect(function()
+        if dragging then
+            local pos = UserInputService:GetMouseLocation()
+            local absPos = sliderBg.AbsolutePosition
+            local size = sliderBg.AbsoluteSize
+            local percent = math.clamp((pos.X - absPos.X) / size.X, 0, 1)
+            value = min + (max - min) * percent
+            fill.Size = UDim2.new(percent, 0, 1, 0)
+            valueLabel.Text = string.format("%.1f", value)
+            callback(value)
+        end
+    end)
+    
+    return frame
+end
+
+function AddSeparator(text)
+    local sep = Instance.new("TextLabel")
+    sep.Size = UDim2.new(1, 0, 0, 30)
+    sep.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    sep.Text = text
+    sep.TextColor3 = Color3.fromRGB(0, 255, 100)
+    sep.TextSize = 14
+    sep.Font = Enum.Font.GothamBold
+    sep.Parent = Scrolling
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = sep
+    return sep
+end
+
+-- ========== SERVER INFO ==========
+local InfoFrame = Instance.new("Frame")
+InfoFrame.Size = UDim2.new(1, 0, 0, 180)
+InfoFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+InfoFrame.Parent = Scrolling
+
+local InfoCorner = Instance.new("UICorner")
+InfoCorner.CornerRadius = UDim.new(0, 8)
+InfoCorner.Parent = InfoFrame
+
+local InfoText = Instance.new("TextLabel")
+InfoText.Size = UDim2.new(1, -20, 1, -10)
+InfoText.Position = UDim2.new(0, 10, 0, 5)
+InfoText.BackgroundTransparency = 1
+InfoText.Text = "Cargando..."
+InfoText.TextColor3 = Color3.fromRGB(200, 200, 200)
+InfoText.TextSize = 12
+InfoText.Font = Enum.Font.Gotham
+InfoText.TextXAlignment = Enum.TextXAlignment.Left
+InfoText.TextYAlignment = Enum.TextYAlignment.Top
+InfoText.Parent = InfoFrame
+
+function UpdateServerInfo()
+    local info = string.format([[
+═════ SERVER INFO ═════
+🌐 Server: %s
+👥 Players: %d/%d
+📌 Place ID: %d
+🏷️ Game: %s
+⚡ FPS: %d
+🕒 Uptime: %d min
+📡 Ping: %d ms
+💾 Memory: %.0f KB
+    ]], game.JobId:sub(1, 20) or "Unknown",
+        #Players:GetPlayers(),
+        game.Players.MaxPlayers,
+        game.PlaceId,
+        game.Name,
+        math.floor(1 / RunService.RenderStepped:Wait()),
+        math.floor(workspace.DistributedGameTime / 60),
+        math.floor(Stats:GetValue("Network/ServerStatsItem/DataStats/Ping") * 1000),
+        collectgarbage("count"))
+    
+    InfoText.Text = info
+end
+
+spawn(function()
+    while true do
+        UpdateServerInfo()
+        wait(2)
+    end
+end)
+
+-- ========== ESP FUNCTION ==========
+function CreateESP(player)
+    if player == LocalPlayer then return end
+    
+    local function AddESP(char)
+        if not char then return end
+        
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "HKL_ESP"
+        highlight.Parent = char
+        highlight.FillTransparency = espSettings.FillTransparency
+        highlight.OutlineTransparency = 0
+        highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        
+        if espSettings.RGB then
+            local hue = 0
+            local conn
+            conn = RunService.RenderStepped:Connect(function()
+                if not highlight or not highlight.Parent then
+                    if conn then conn:Disconnect() end
+                    return
+                end
+                hue = (hue + 0.01) % 1
+                local col = Color3.fromHSV(hue, 1, 1)
+                highlight.OutlineColor = col
+                highlight.FillColor = col
+            end)
+            table.insert(espConnections, conn)
+        end
+        
+        local diedConn = char:FindFirstChildOfClass("Humanoid").Died:Connect(function()
+            highlight:Destroy()
+        end)
+        table.insert(espConnections, diedConn)
+        table.insert(espObjects, highlight)
+    end
+    
+    if player.Character then
+        AddESP(player.Character)
+    end
+    
+    player.CharacterAdded:Connect(AddESP)
+end
+
+function ToggleESP(state)
+    espActive = state
+    
+    if state then
+        for _, v in pairs(espObjects) do
+            if v and v.Parent then v:Destroy() end
+        end
+        espObjects = {}
+        
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                CreateESP(plr)
+            end
+        end
+        
+        Players.PlayerAdded:Connect(CreateESP)
+    else
+        for _, v in pairs(espObjects) do
+            pcall(function() v:Destroy() end)
+        end
+        for _, v in pairs(espConnections) do
+            pcall(function() v:Disconnect() end)
+        end
+        espObjects = {}
+        espConnections = {}
+        
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr.Character then
+                for _, obj in pairs(plr.Character:GetChildren()) do
+                    if obj.Name == "HKL_ESP" then
+                        pcall(function() obj:Destroy() end)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ========== AIMBOT FUNCTION ==========
+function GetClosestPlayer()
+    local closest = nil
+    local shortest = aimbotSettings.FOV
+    
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild(aimbotSettings.TargetPart) then
+            local part = plr.Character[aimbotSettings.TargetPart]
+            local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+            if onScreen then
+                local dist = (Vector2.new(Mouse.X, Mouse.Y) - Vector2.new(pos.X, pos.Y)).Magnitude
+                if dist < shortest then
+                    shortest = dist
+                    closest = plr
+                end
+            end
+        end
+    end
+    return closest
+end
+
+UserInputService.InputBegan:Connect(function(input)
+    if aimbotActive and input.UserInputType == Enum.UserInputType.MouseButton2 then
+        local target = GetClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild(aimbotSettings.TargetPart) then
+            local targetPos = target.Character[aimbotSettings.TargetPart].Position
+            TweenService:Create(Camera, TweenInfo.new(aimbotSettings.Smoothness, Enum.EasingStyle.Linear), {
+                CFrame = CFrame.new(Camera.CFrame.Position, targetPos)
+            }):Play()
+        end
+    end
+end)
+
+-- ========== FLY FUNCTION ==========
+function ToggleFly()
+    flyActive = not flyActive
+    
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return end
+    
+    if flyActive then
+        hum.PlatformStand = true
+        
+        flyBodyVelocity = Instance.new("BodyVelocity")
+        flyBodyVelocity.Parent = root
+        flyBodyVelocity.MaxForce = Vector3.new(9e5, 9e5, 9e5)
+        
+        flyBodyGyro = Instance.new("BodyGyro")
+        flyBodyGyro.Parent = root
+        flyBodyGyro.MaxTorque = Vector3.new(9e5, 9e5, 9e5)
+        flyBodyGyro.P = 9e5
+        
+        RunService:BindToRenderStep("FlyLoop", 0, function()
+            if not flyActive or not root or not root.Parent then
+                RunService:UnbindFromRenderStep("FlyLoop")
+                return
+            end
+            
+            local move = Vector3.new(0, 0, 0)
+            local cam = Camera
+            
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move = move - Vector3.new(0, 1, 0) end
+            
+            if move.Magnitude > 0 then
+                move = move.Unit * 50
+            end
+            
+            flyBodyVelocity.Velocity = move
+            flyBodyGyro.CFrame = cam.CFrame
+        end)
+    else
+        RunService:UnbindFromRenderStep("FlyLoop")
+        if flyBodyVelocity then flyBodyVelocity:Destroy() end
+        if flyBodyGyro then flyBodyGyro:Destroy() end
+        hum.PlatformStand = false
+    end
+end
+
+-- ========== CONSTRUIR MENÚ ==========
+AddSeparator("📡 SERVER BROWSER")
+-- InfoFrame ya añadido
+
+AddSeparator("👁️ VISUALES")
+local espToggle = AddToggle("🔴 ESP ACTIVO", function(state)
+    ToggleESP(state)
+end)
+
+local rgbToggle = AddToggle("🌈 MODO RGB", function(state)
+    espSettings.RGB = state
+    if espActive then
+        ToggleESP(false)
+        ToggleESP(true)
+    end
+end)
+
+AddSeparator("🎯 AIMBOT")
+local aimToggle = AddToggle("🎯 AIMBOT", function(state)
+    aimbotActive = state
+end)
+
+AddSlider("🎯 FOV", 30, 360, 90, function(value)
+    aimbotSettings.FOV = value
+end)
+
+AddSlider("🔄 SMOOTHNESS", 0.1, 1, 0.3, function(value)
+    aimbotSettings.Smoothness = value
+end)
+
+-- Dropdown para Target Part
+local targetFrame = Instance.new("Frame")
+targetFrame.Size = UDim2.new(1, 0, 0, 40)
+targetFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+targetFrame.Parent = Scrolling
+
+local targetCorner = Instance.new("UICorner")
+targetCorner.CornerRadius = UDim.new(0, 8)
+targetCorner.Parent = targetFrame
+
+local targetLabel = Instance.new("TextLabel")
+targetLabel.Size = UDim2.new(0.6, 0, 1, 0)
+targetLabel.Position = UDim2.new(0, 10, 0, 0)
+targetLabel.BackgroundTransparency = 1
+targetLabel.Text = "🎯 OBJETIVO: Head"
+targetLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+targetLabel.TextSize = 12
+targetLabel.Font = Enum.Font.Gotham
+targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+targetLabel.Parent = targetFrame
+
+local targetBtn = Instance.new("TextButton")
+targetBtn.Size = UDim2.new(0, 70, 0, 30)
+targetBtn.Position = UDim2.new(1, -80, 0.5, -15)
+targetBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+targetBtn.Text = "Head"
+targetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+targetBtn.TextSize = 12
+targetBtn.Font = Enum.Font.Gotham
+targetBtn.Parent = targetFrame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 5)
+btnCorner.Parent = targetBtn
+
+local targetOptions = {"Head", "HumanoidRootPart", "Torso"}
+local targetIdx = 1
+targetBtn.MouseButton1Click:Connect(function()
+    targetIdx = targetIdx % #targetOptions + 1
+    local selected = targetOptions[targetIdx]
+    targetBtn.Text = selected
+    targetLabel.Text = "🎯 OBJETIVO: " .. selected
+    aimbotSettings.TargetPart = selected
+end)
+
+AddSeparator("⚙️ UTILIDADES")
+AddButton("🔄 REJOIN SERVER", Color3.fromRGB(255, 80, 80), function()
+    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end)
+
+AddButton("🌍 SERVER HOP", Color3.fromRGB(80, 120, 255), function()
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+end)
+
+AddButton("🚀 FLY (WASD + Space/Ctrl)", Color3.fromRGB(80, 200, 120), function()
+    ToggleFly()
+end)
+
+AddButton("⚡ INFINITE YIELD", Color3.fromRGB(150, 100, 200), function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+end)
+
+AddButton("💤 ANTI AFK", Color3.fromRGB(100, 180, 100), function()
+    LocalPlayer.Idled:Connect(function()
+        VirtualUser:Button2Down(Vector2.new(0,0), Camera.CFrame)
+        wait(1)
+        VirtualUser:Button2Up(Vector2.new(0,0), Camera.CFrame)
+    end)
+end)
+
+AddButton("🔧 RESET CHARACTER", Color3.fromRGB(200, 120, 80), function()
+    if LocalPlayer.Character then
+        LocalPlayer.Character:BreakJoints()
+    end
+end)
+
+-- Actualizar tamaño del scroll
+UILayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    Scrolling.CanvasSize = UDim2.new(0, 0, 0, UILayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- ========== BOTÓN PARA ABRIR/CERRAR ==========
+ToggleBtn.MouseButton1Click:Connect(function()
+    menuOpen = not menuOpen
+    MainMenu.Visible = menuOpen
+end)
+
+-- ========== INICIALIZACIÓN ==========
+UILayout:GetPropertyChangedSignal("AbsoluteContentSize"):Wait()
+Scrolling.CanvasSize = UDim2.new(0, 0, 0, UILayout.AbsoluteContentSize.Y + 10)
+
+print("✅ HKL BROWSER SERVER v4.0 CARGADO")
+print("👑 VPM | JNZ | HKL ~ Sociedad 035")
+print("🔘 Botón ☰ en esquina superior derecha para abrir/cerrar")
